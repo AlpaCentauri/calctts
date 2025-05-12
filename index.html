@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AP Calc BC Answers Reader</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: sans-serif; margin: 1em; }
+    textarea { width: 100%; height: 200px; font-size: 1em; }
+    .controls { margin: .5em 0; }
+    button { font-size: 1em; padding: .5em 1em; margin-right: .5em; }
+    #status { margin-top: .5em; }
+  </style>
+</head>
+<body>
+  <h2>AP Calc BC TTS Answers Reader</h2>
+  <p>Paste your 30 answers here (one per line):</p>
+  <textarea id="answers" placeholder="
+A. 5  
+B. x = 2  
+…  
+E. None of the above  
+"></textarea>
+  <br>
+  <button id="start">Start</button>
+
+  <div class="controls">
+    <button id="prevBtn">← Back</button>
+    <button id="nextBtn">Next →</button>
+  </div>
+
+  <div id="status">Current: <span id="current">0</span>/<span id="total">0</span></div>
+
+  <script>
+    let answers = [], idx = -1;
+    let voices = [], selectedVoice = null;
+
+    // Load available voices and pick the best match
+    function loadVoices() {
+      voices = speechSynthesis.getVoices();
+      selectedVoice = voices.find(v => /Samantha|Google US English|Alex/.test(v.name))
+                      || voices[0];
+    }
+    speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    // Cleanup any paused utterance, then speak
+    function speak(text) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.voice = selectedVoice;
+      u.lang  = 'en-US';
+      u.rate  = 1;
+      speechSynthesis.speak(u);
+    }
+
+    // Turn "A. foo" into "Choice A, foo"
+    function formatAnswer(line) {
+      const m = line.match(/^([A-E])\.\s*(.*)/i);
+      if (m) return `Choice ${m[1].toUpperCase()}. ${m[2]}`;
+      return line;
+    }
+
+    function updateStatus() {
+      current.textContent = idx < 0 ? 0 : idx + 1;
+      total.textContent   = answers.length;
+    }
+
+    function onNext() {
+      if (!answers.length) return;
+      idx = (idx + 1) % answers.length;
+      updateStatus();
+      speak(formatAnswer(answers[idx]));
+      if (navigator.mediaSession)
+        navigator.mediaSession.playbackState = 'playing';
+    }
+    function onPrev() {
+      if (!answers.length) return;
+      idx = (idx - 1 + answers.length) % answers.length;
+      updateStatus();
+      speak(formatAnswer(answers[idx]));
+      if (navigator.mediaSession)
+        navigator.mediaSession.playbackState = 'playing';
+    }
+
+    // Setup Media Session for Bluetooth remote
+    function setupMediaSession() {
+      if (!navigator.mediaSession) return;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'AP Calc Answers',
+        artist: 'TTS Reader'
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', onNext);
+      navigator.mediaSession.setActionHandler('previoustrack', onPrev);
+    }
+
+    // Wire up buttons and start logic
+    const answersEl = document.getElementById('answers');
+    const startBtn  = document.getElementById('start');
+    const prevBtn   = document.getElementById('prevBtn');
+    const nextBtn   = document.getElementById('nextBtn');
+    const current   = document.getElementById('current');
+    const total     = document.getElementById('total');
+
+    startBtn.addEventListener('click', () => {
+      answers = answersEl.value
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l);
+      if (!answers.length) {
+        alert('Please enter at least one answer.');
+        return;
+      }
+      idx = -1;
+      updateStatus();
+      setupMediaSession();
+      speak('Ready. Press Next to begin.');
+    });
+
+    prevBtn.addEventListener('click', onPrev);
+    nextBtn.addEventListener('click', onNext);
+
+    // Fallback for keyboard and media keys
+    window.addEventListener('keydown', e => {
+      if (e.code === 'MediaTrackNext')     { onNext(); e.preventDefault(); }
+      if (e.code === 'MediaTrackPrevious') { onPrev(); e.preventDefault(); }
+      if (e.key === 'ArrowRight')          onNext();
+      if (e.key === 'ArrowLeft')           onPrev();
+    });
+  </script>
+</body>
+</html>
